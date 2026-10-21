@@ -1,0 +1,29 @@
+#!/bin/sh
+# RV1106 wafer_direct 开机自启脚本
+# 放置位置: /etc/init.d/S99waferdirect
+# 权限: chmod +x /etc/init.d/S99waferdirect
+# Buildroot 会按 S## 编号顺序在开机时自动执行 start
+
+case "$1" in
+    start)
+        cd /root/wafer_test/8_class
+        chmod +x wafer_direct
+        export LD_LIBRARY_PATH=/oem/usr/lib:./
+        mkdir -p incoming processed
+        ./wafer_direct wafer_pc_int8.rknn &
+        ;;
+    stop)
+        killall wafer_direct
+        ;;
+    restart)
+        killall wafer_direct
+        sleep 1
+        cd /root/wafer_test/8_class
+        export LD_LIBRARY_PATH=/oem/usr/lib:./
+        ./wafer_direct wafer_pc_int8.rknn &
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart}"
+        exit 1
+        ;;
+esac

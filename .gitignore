@@ -1,0 +1,54 @@
+# ===== 编译产物 =====
+build/
+*.o
+*.obj
+*.so
+*.a
+*.dll
+*.exe
+*.out
+*.app
+
+# ===== Qt 生成文件 =====
+*.pro.user
+*.pro.user.*
+moc_*.cpp
+moc_*.h
+qrc_*.cpp
+ui_*.h
+*.moc
+
+# ===== Python =====
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
+
+# ===== 模型大文件（用 Git LFS 追踪，这里忽略备份） =====
+*.rknn.bak
+*.onnx.bak
+*.pt
+*.pth
+
+# ===== IDE / 编辑器 =====
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ===== 日志 / 临时数据 =====
+*.log
+*.tmp
+incoming/
+processed/
+*.bin.tmp
+
+# ===== 文档临时 =====
+*.bak
+*.old
