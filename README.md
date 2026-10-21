@@ -89,17 +89,24 @@ rv1106-wafer-defect-inspection/
 ├── LICENSE
 ├── .gitignore
 ├── docs/
-│   ├── architecture.md        # 架构与协议说明
-│   ├── build.md               # 交叉编译步骤
-│   └── deploy.md              # 板端部署与开机自启
+│   ├── architecture.md        # 架构与协议说明（端口/edge bin/TCP协议/SSE选型）
+│   ├── build.md               # 交叉编译与Qt编译步骤
+│   ├── deploy.md              # 板端部署与开机自启
+│   ├── training_results.md    # 模型训练性能数据
+│   ├── rknn_quantization.md   # RKNN INT8量化转换步骤与喂数契约
+│   └── pitfalls.md            # 踩坑记录与根因分析
+├── train/                     # 模型训练（PyTorch）
+│   ├── train.py               # 完整训练脚本（Focal Loss+早停+ONNX导出）
+│   ├── wm811k_dataset.py      # 数据集加载+模型定义+16维特征提取
+│   └── requirements.txt       # Python 依赖
 ├── board/                     # 板端 C 服务
-│   ├── wafer_direct.c         # 一体化服务（目录直解+TCP+HTTP/SSE+UDP）
-│   └── wafer_edge_server.c    # 旧版 TCP+SSE 服务
+│   ├── wafer_direct.c         # 一体化服务（目录直解+TCP+HTTP/SSE+UDP），当前主力
+│   └── wafer_edge_server.c    # 旧版 TCP+SSE 服务（已废弃，保留参考）
 ├── host/                      # Qt 上位机
 │   ├── mainwindow.cpp / .h
 │   ├── devicepanel.cpp / .h
 │   ├── waferconverter.cpp / .h
-│   └── wafer_direct.pro
+│   └── WaferInspector.pro
 ├── web/
 │   └── dashboard.html         # SSE 实时看板（独立参考版，板端实际内嵌于 wafer_direct.c）
 ├── tools/
@@ -109,8 +116,33 @@ rv1106-wafer-defect-inspection/
 │   ├── cross_compile.sh       # 交叉编译脚本
 │   └── S99waferdirect         # Buildroot 开机自启
 └── model/
-    └── wafer_pc_int8.rknn     # INT8 量化模型（Git LFS）
+    ├── wafer_pc_int8.rknn     # INT8 量化模型（Git LFS）
+    └── wafer_model.onnx       # ONNX 导出模型（Git LFS，可选）
 ```
+
+## 模型训练
+
+模型基于 WM-811K 公开数据集训练，采用双输入 CNN（图像分支 + 16 维手工特征分支 + SE 通道注意力），Focal Loss 处理类别不均衡。
+
+```bash
+cd train
+pip install -r requirements.txt
+# 将 LSWMD.pkl 放入 train/data/ 目录（需自行下载，勿提交Git）
+python train.py --data ./data/LSWMD.pkl --epochs 60 --batch_size 64 --gamma 1.5
+```
+
+训练完成后输出：最佳模型 `best_wafer.pt`、ONNX 模型 `wafer_model.onnx`、特征归一化参数 `feature_norm.npz`、混淆矩阵与训练曲线。
+
+| 指标 | 值 |
+|---|---|
+| 测试集 Accuracy | 89.83% |
+| 测试集 Macro-F1 | 0.8689 |
+| 模型参数量 | 442,616 |
+| ONNX 模型大小 | 1.70 MB |
+| RKNN INT8 板端准确率 | 92.5%（200张独立子集） |
+| NPU 单帧推理 | 2.12 ms |
+
+详见 [docs/training_results.md](docs/training_results.md)。
 
 ## 快速开始
 
@@ -153,7 +185,7 @@ mkdir -p incoming processed
 
 ```bash
 cd host
-qmake wafer_direct.pro
+qmake WaferInspector.pro
 make -j4
 ```
 
@@ -183,6 +215,30 @@ make -j4
 Qt → 板: 12356 B = "RFNS"(4) + img(12288) + feat(64)
 板 → Qt: 44 B    = "RFNR"(4) + pred(int32) + conf(float32) + 8×logits(float32)
 ```
+
+## 创新点
+
+- **双输入融合模型**：图像空间纹理 + 16 维统计特征双分支 CNN，较单图像模型提升分类精度
+- **统一中间表示**：12352B edge bin 解耦数据源与推理端，新测试机格式只需适配一个解析器
+- **多源格式适配层**：STDF/BIN/PNG → edge bin，Qt C++ 实现无 Python 依赖，策略模式可扩展
+- **产线全链路自动化**：文件夹热监控 + 写入稳定性检测 + 自动转换上传 + NPU 推理 + SSE 实时上屏
+
+## 踩坑记录
+
+开发过程中遇到的 8 个关键问题及根因分析，详见 [docs/pitfalls.md](docs/pitfalls.md)。包括：图像双重量化精度暴跌、uclibc/glibc ABI 段错误、E2E 时延 773ms→2ms 计时修正、Qt 图层重叠等。
+
+## 未来规划
+
+### 短期
+- 真实产线 STDF 格式适配（多 Part / 多 Test Number 映射）
+- TTA 测试时增强 + 困难样本挖掘，精度目标 95%+
+- 板端多 batch 推理 + 输入预取，吞吐量提升 2-3 倍
+
+### 中长期
+- 多板集群调度与负载均衡
+- OTA 远程更新 RKNN 模型
+- MES 系统对接（OPC UA / REST API）
+- 联邦学习（多产线数据联合训练，数据不出厂）
 
 ## 许可证
 
