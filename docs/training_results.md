@@ -63,6 +63,49 @@
 
 ## 数据集来源
 
-WM-811K 数据集（Wu et al., 2014），原始文件 LSWMD.pkl。
-- 论文：*Wu, M. et al. "Wafer Map Failure Pattern Recognition and Similarity Ranking for Large-Scale Data Sets." IEEE Transactions on Semiconductor Manufacturing, 2014.*
-- 请勿将 LSWMD.pkl 提交至 Git 仓库（文件较大且为公开数据集），使用时请自行下载并放置于 `train/data/` 目录。
+WM-811K 数据集（文件名为 `LSWMD.pkl`），由台积电（TSMC）提供，是目前最大的公开晶圆图缺陷数据集。
+
+| 项目 | 说明 |
+|---|---|
+| 原始论文 | Wu, M.-J., Jang, J.-S. R., & Chen, J.-L. (2015). "Wafer Map Failure Pattern Recognition and Similarity Ranking for Large-Scale Data Sets." *IEEE Transactions on Semiconductor Manufacturing*, 28(1), 1–12. |
+| DOI | [10.1109/TSM.2014.2364237](https://doi.org/10.1109/TSM.2014.2364237) |
+| 下载地址 | [Kaggle: WM-811K wafer map](https://www.kaggle.com/datasets/qingyi/wm811k-wafer-map)（CC0 公共领域） |
+| 总样本数 | 811,457 张晶圆图（47,543 个 lot） |
+| 带标签样本 | 约 25,519 张（仅占 ~3.1%，其余为无标签 None 类） |
+| 缺陷类别 | 8 类：Center, Donut, Edge-Loc, Edge-Ring, Loc, Near-full, Random, Scratch |
+| 图像格式 | 64×64 三值矩阵（0=背景 / 1=良品 / 2=失效） |
+
+> 使用时请自行下载 `LSWMD.pkl` 放置于 `train/data/` 目录，**不要提交至 Git 仓库**（文件较大且为公开数据集）。
+
+## 相关工作与性能对比
+
+以下为基于 WM-811K 数据集的代表性研究，用于定位本项目模型在学术界的位置。
+
+| 方法 | 发表 | 参数量 | Accuracy | Macro-F1 | 部署平台 |
+|---|---|---|---|---|---|
+| DMC1 (传统方法) | 2019 | — | 94.0% | — | PC |
+| DCNN (Saqlain et al.) | 2020 | — | 96.2% | — | PC |
+| VGG16 (baseline) | — | ~138M | 92.8% | — | PC |
+| DCNN+ECOC-SVM | 2021 | — | 96.4% | — | PC |
+| MobileNetV3 (Sensors) | 2023 | ~5.4M | 98.0% | 0.895 | PC |
+| 双路径+注意力 (IEEE TSM) | 2025 | 3.17M | 96.8% | — | PC |
+| 自编码器增强+CNN (arXiv) | 2024 | — | 98.56% | — | PC |
+| **本项目（双输入CNN）** | 2026 | **0.44M** | **89.83%** | **0.869** | **RV1106 NPU** |
+
+### 诚实定位
+
+- **精度差距是预期内的**：多数期刊论文使用 VGG16/ResNet 等大模型（参数量 25M~138M），在 PC GPU 上训练推理。本项目模型仅 442K 参数（小 50~300 倍），且必须满足 RV1106 64MB 内存 + 0.5TOPS NPU 的边缘部署约束。
+- **Macro-F1 0.869 接近 MobileNetV3 的 0.895**：在 1/12 参数量下达到相近的宏平均 F1，说明双输入（图像+16维统计特征）架构在小模型上是有效的。
+- **少数类仍是瓶颈**：与文献一致，Loc（F1=0.78）和 Scratch（F1=0.83）等少数类精度偏低。Saqlain et al. (2020) 同样报告 Scratch 仅 70.08%、Loc 仅 72.04%，这是 WM-811K 数据集的固有类别不平衡问题。
+- **本项目的核心创新不在模型精度，而在系统级**：从训练→量化→边缘NPU部署→Qt上位机→SSE网页看板的全栈闭环，以及统一 edge bin 中间表示和产线全链路自动化。这是上述期刊论文均未覆盖的工程维度。
+
+### 借鉴与创新
+
+| 维度 | 借鉴自文献 | 本项目创新 |
+|---|---|---|
+| 数据集 | WM-811K (Wu et al. 2015)，标准 8 类划分 | — |
+| 模型架构 | CNN 提取晶圆空间纹理（Saqlain 2020 等） | 双输入融合：图像分支 + 16维统计特征分支 |
+| 训练方法 | Focal Loss 处理类别不平衡 | SE 注意力 + 特征分支 MLP |
+| 量化部署 | INT8 量化是边缘AI常规操作 | 锁定 image/features/output 三组量化参数，喂数契约 |
+| 系统设计 | — | 统一 12352B edge bin 格式、多源格式适配层、产线热监控全链路自动化 |
+| 监控方案 | — | 64MB 内存板端手写 HTTP/SSE 服务器，替代 WebSocket |

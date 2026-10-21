@@ -216,6 +216,28 @@ Qt → 板: 12356 B = "RFNS"(4) + img(12288) + feat(64)
 板 → Qt: 44 B    = "RFNR"(4) + pred(int32) + conf(float32) + 8×logits(float32)
 ```
 
+## 数据集与相关工作
+
+### 数据集
+
+本项目使用 **WM-811K**（文件名 `LSWMD.pkl`），由台积电（TSMC）提供，是目前最大的公开晶圆图缺陷数据集。
+
+- **原始论文**：Wu, M.-J., Jang, J.-S. R., & Chen, J.-L. (2015). "Wafer Map Failure Pattern Recognition and Similarity Ranking for Large-Scale Data Sets." *IEEE Transactions on Semiconductor Manufacturing*, 28(1), 1–12. [DOI](https://doi.org/10.1109/TSM.2014.2364237)
+- **下载地址**：[Kaggle: WM-811K wafer map](https://www.kaggle.com/datasets/qingyi/wm811k-wafer-map)（CC0 公共领域）
+- **规模**：811,457 张晶圆图，其中带标签 25,519 张，8 类缺陷模式
+- **使用方式**：自行下载 `LSWMD.pkl` 放置于 `train/data/`，**不要提交至 Git**
+
+### 与期刊论文的性能对比
+
+| 方法 | 参数量 | Accuracy | Macro-F1 | 平台 |
+|---|---|---|---|---|
+| VGG16 (baseline) | ~138M | 92.8% | — | PC |
+| MobileNetV3 (Sensors 2023) | ~5.4M | 98.0% | 0.895 | PC |
+| 双路径+注意力 (IEEE TSM 2025) | 3.17M | 96.8% | — | PC |
+| **本项目** | **0.44M** | **89.83%** | **0.869** | **RV1106 NPU** |
+
+> 本项目模型参数量仅为 VGG16 的 1/312、MobileNetV3 的 1/12，在 64MB 内存边缘 NPU 上实现 2.12ms/帧推理。精度差距源于模型规模约束，Macro-F1 已接近 MobileNetV3。核心创新在全栈边缘部署系统，而非 SOTA 精度。详见 [docs/training_results.md](docs/training_results.md)。
+
 ## 创新点
 
 - **双输入融合模型**：图像空间纹理 + 16 维统计特征双分支 CNN，较单图像模型提升分类精度
